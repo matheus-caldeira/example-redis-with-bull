@@ -1,0 +1,39 @@
+version: "3.7"
+
+volumes:
+  redis_vol1:
+
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    command: yarn ${NODE_ENV}
+    depends_on:
+      - redis
+    ports:
+      - ${SERVER_PORT}:3333
+    volumes:
+      - .:/app
+    networks:
+      - app-network
+
+  redis:
+    image: bitnami/redis:latest
+    volumes:
+      - redis_vol1:/data
+    networks:
+      - app-network
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASS}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+      start_period: 40s
+

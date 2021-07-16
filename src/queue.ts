@@ -1,36 +1,75 @@
 import Queue from 'bull';
 import { BullAdapter } from 'bull-board/bullAdapter';
-import {createBullBoard} from 'bull-board/'
+import {createBullBoard} from 'bull-board'
 
 import redis from './config/redis'
-import * as jobs from './jobs';
+import jobs from './jobs';
 
-const queues = Object.values(jobs).map(job => ({
-  bull: new Queue(job.key, { redis }),
-  name: job.key,
-  handle: job.handle,
-  options: job.options,
-}));
+const queues: any[] = [];
+// Object.values(jobs).map(job => ({
+//   bull: new Queue(job.key, {...redis, limiter: {
+//     duration: 1,
+//     max: 1,
+//   }}),
+//   prefix: '',
+//   name: job.key,
+//   handle: job.handle,
+//   options: job.options,
+// }));
 
-const add = (name: string, data: any): any => {
-  const queue = queues.find(qu => qu.name === name);
+const subQueues: any[] = [];
 
-  return queue?.bull.add(data, queue.options);
+const all = createBullBoard([])
+const orders = createBullBoard([]);
+
+interface IAdd {
+  name: string;
+  prefix?: string;
+  data: any;
+}
+
+const create = ({name, data, prefix}: IAdd) => {
+  const queue = {
+    bull: new Queue(`${prefix}:${name}`, {...redis, limiter: {
+      max: 1,
+      duration: 1,
+    }}),
+    prefix: prefix,
+    name: `${prefix}:${name}`,
+    handle: jobs[name].handle,
+    options: jobs[name].options,
+  }
+  queue.bull.process(queue.handle);
+  queue.bull.add(data, queue.options)
+
+  return queue;
 };
 
-const process = (): void => {
-  return queues.forEach(queue => {
-    queue.bull.process(queue.handle);
-  });
-};
+const add = ({name, data, prefix = ''}: IAdd): any => {
+  if (!!prefix) {
+    let queue = subQueues.find(qu => `${prefix}:${name}` === qu.name);
 
-const {router} = createBullBoard(queues.map(queue => new BullAdapter(queue.bull)))
+    if(!queue) {
+      queue = create({name, data, prefix});
+      subQueues.push(queue);
+      orders.setQueues(subQueues.map(qu => new BullAdapter(qu.bull)));
+    } else
+      queue.bull.add(data, queue.options)
+  } else {
+    let queue = queues.find(qu => qu.name === name);
+    if (!queue){
+      queue = create({name, data, prefix});
+      queues.push(queue);
+      orders.setQueues(queues.map(qu => new BullAdapter(qu.bull)));
+    }
+    else
+      queue?.bull.add(data, queue.options);
+  }
+};
 
 export {
   queues,
   add,
-  process,
-  router,
+  all,
+  orders,
 };
-
-process();

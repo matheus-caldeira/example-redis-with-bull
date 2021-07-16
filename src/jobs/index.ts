@@ -1,5 +1,15 @@
+import { JobOptions } from 'bull';
+
 import Example from './Example';
 
-export {
+
+interface IJobs {
+  [t: string]: {
+    key: string,
+    handle(data: any): Promise<any>,
+    options: JobOptions,
+  }
+}
+export default {
   Example,
-};
+} as IJobs;
